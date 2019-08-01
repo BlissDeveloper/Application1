@@ -26,6 +26,9 @@ import android.os.Bundle;
 import android.os.strictmode.CleartextNetworkViolation;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.telephony.TelephonyManager;
+import android.telephony.gsm.GsmCellLocation;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.Menu;
@@ -105,6 +108,7 @@ public class HomeActivity extends AppCompatActivity {
     //Misc
     private WifiManager wifiManager;
     private WifiInfo connection;
+    private TelephonyManager telephonyManager;
 
 
     @Override
@@ -113,6 +117,7 @@ public class HomeActivity extends AppCompatActivity {
         setContentView(R.layout.activity_home);
 
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        telephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
 
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(HomeActivity.this);
 
@@ -314,7 +319,33 @@ public class HomeActivity extends AppCompatActivity {
                     case Dialog.BUTTON_POSITIVE:
                         //Yes
                         String BSSID = connection.getBSSID();
-                        Log.d("Avery", "BSSID: " + BSSID);
+                        String networkOperator = telephonyManager.getNetworkOperator();
+
+                        if (!TextUtils.isEmpty(networkOperator)) {
+
+                            if (telephonyManager.getPhoneType() == TelephonyManager.PHONE_TYPE_GSM) {
+                                if(ContextCompat.checkSelfPermission(HomeActivity.this, Manifest.permission.ACCESS_WIFI_STATE) ==
+                                        PackageManager.PERMISSION_GRANTED) {
+                                    final GsmCellLocation location = (GsmCellLocation) telephonyManager.getCellLocation();
+                                    if (location != null) {
+
+                                        int mcc = Integer.parseInt(networkOperator.substring(0, 3));
+                                        int mnc = Integer.parseInt(networkOperator.substring(3));
+                                        Log.d("Avery", "BSSID: " + BSSID);
+                                        Log.d("Avery", "MCC: " + mcc);
+                                        Log.d("Avery", "MNC: " + mnc);
+                                        Log.d("Avery", "LAC: " + location.getLac());
+                                        Log.d("Avery", "CID: " + location.getCid());
+
+                                        /*
+                                        1. NEEDS MORE CHECKING. KUNG GSM BA SIYA OR ANYWHAT
+                                        2. FIRESTORE INSERTION
+                                         */
+                                    }
+                                }
+                            }
+
+                        }
                         break;
                     case Dialog.BUTTON_NEGATIVE:
                         //No
