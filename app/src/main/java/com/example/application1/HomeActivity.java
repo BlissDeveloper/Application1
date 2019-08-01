@@ -20,6 +20,8 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.location.Location;
 import android.location.LocationManager;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.strictmode.CleartextNetworkViolation;
 import android.provider.MediaStore;
@@ -50,6 +52,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.security.Permission;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -83,6 +86,8 @@ public class HomeActivity extends AppCompatActivity {
     private final int IMAGE_CAPTURE_REQUEST = 1;
     private final int LOCATION_REQUEST = 2;
     private final int LOCATION_SETTINGS_REQUEST = 3;
+    private final int WIFI_STATE_REQUEST = 4;
+
     private FusedLocationProviderClient fusedLocationProviderClient;
 
     private LocationManager locationManager;
@@ -96,6 +101,10 @@ public class HomeActivity extends AppCompatActivity {
     private static final long MIN_TIME_BW_UPDATES = 1000 * 60 * 1; // 1 minute
 
     private Location location;
+
+    //Misc
+    private WifiManager wifiManager;
+    private WifiInfo connection;
 
 
     @Override
@@ -128,8 +137,26 @@ public class HomeActivity extends AppCompatActivity {
         cardViewLocation = findViewById(R.id.cardView3);
         cardViewChat = findViewById(R.id.cardView2);
 
+        wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        connection = wifiManager.getConnectionInfo();
+
+
         //Location
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(HomeActivity.this);
+
+        imageViewSendNetwork.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (ContextCompat.checkSelfPermission(HomeActivity.this, Manifest.permission.ACCESS_WIFI_STATE)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    requestWifiStatePermission();
+                    Log.d("Avery", "Not yet");
+                } else {
+                    showNetworkDialog();
+                    Log.e("Avery", "Permitted");
+                }
+            }
+        });
 
         imageViewChat.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -268,7 +295,37 @@ public class HomeActivity extends AppCompatActivity {
                     Toast.makeText(this, "Location permission is required to access this feature", Toast.LENGTH_SHORT).show();
                 }
                 break;
+            case WIFI_STATE_REQUEST:
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+
+                } else {
+                    Toast.makeText(this, "Wifi information permission is required to access this feature.", Toast.LENGTH_SHORT).show();
+                }
+                break;
         }
+    }
+
+    public void showNetworkDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(HomeActivity.this);
+        Dialog.OnClickListener clickListener = new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialogInterface, int i) {
+                switch (i) {
+                    case Dialog.BUTTON_POSITIVE:
+                        //Yes
+                        String BSSID = connection.getBSSID();
+                        Log.d("Avery", "BSSID: " + BSSID);
+                        break;
+                    case Dialog.BUTTON_NEGATIVE:
+                        //No
+                        dialogInterface.dismiss();
+                        break;
+                }
+            }
+        };
+        builder.setPositiveButton("Yes", clickListener)
+                .setNegativeButton("No", clickListener)
+                .show();
     }
 
     //Class that handles location changes
@@ -357,6 +414,10 @@ public class HomeActivity extends AppCompatActivity {
         SimpleDateFormat df = new SimpleDateFormat("hh:mm:ss aa");
         String formattedDate = df.format(date);
         return formattedDate;
+    }
+
+    public void requestWifiStatePermission() {
+        ActivityCompat.requestPermissions(HomeActivity.this, new String[]{Manifest.permission.ACCESS_WIFI_STATE}, WIFI_STATE_REQUEST);
     }
 
     public void requestLocation() {
