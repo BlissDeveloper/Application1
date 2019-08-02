@@ -20,6 +20,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.location.Location;
 import android.location.LocationManager;
+import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -35,7 +36,9 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.Gallery;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -47,12 +50,18 @@ import com.google.android.gms.common.api.Status;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.CollectionReference;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.security.Permission;
@@ -61,12 +70,17 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class HomeActivity extends AppCompatActivity {
     private FirebaseAuth mAuth;
     private String currentUserID;
     private CollectionReference locationsRef;
+    private CollectionReference networksRef;
+    private StorageReference imagesRef;
+    private CollectionReference usersRef;
+    private CollectionReference uploadedImagesRef;
 
     private ImageView imageViewCamera;
     private ImageView imageViewChat;
@@ -76,8 +90,6 @@ public class HomeActivity extends AppCompatActivity {
     private ImageView imageViewMap;
 
     private CardView cardViewCamera;
-    private CardView cardViewLocation;
-    private CardView cardViewChat;
 
     private Toolbar toolbarHome;
     private ProgressDialog progressDialog;
@@ -95,21 +107,10 @@ public class HomeActivity extends AppCompatActivity {
 
     private LocationManager locationManager;
 
-    double[] latLong = new double[2];
-
-    // The minimum distance to change Updates in meters
-    private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 10; // 10 meters
-
-    // The minimum time between updates in milliseconds
-    private static final long MIN_TIME_BW_UPDATES = 1000 * 60 * 1; // 1 minute
-
-    private Location location;
-
     //Misc
     private WifiManager wifiManager;
     private WifiInfo connection;
     private TelephonyManager telephonyManager;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -124,6 +125,10 @@ public class HomeActivity extends AppCompatActivity {
         mAuth = FirebaseAuth.getInstance();
         currentUserID = mAuth.getCurrentUser().getUid();
         locationsRef = FirebaseFirestore.getInstance().collection("User_Locations");
+        networksRef = FirebaseFirestore.getInstance().collection("User_Networks");
+        imagesRef = FirebaseStorage.getInstance().getReference().child("Images");
+        usersRef = FirebaseFirestore.getInstance().collection("Users");
+        uploadedImagesRef = FirebaseFirestore.getInstance().collection("Uploaded_Images");
 
         toolbarHome = findViewById(R.id.toolbarHome);
         setSupportActionBar(toolbarHome);
@@ -139,15 +144,20 @@ public class HomeActivity extends AppCompatActivity {
         imageViewMap = findViewById(R.id.imageViewMap);
 
         cardViewCamera = findViewById(R.id.cardView);
-        cardViewLocation = findViewById(R.id.cardView3);
-        cardViewChat = findViewById(R.id.cardView2);
 
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         connection = wifiManager.getConnectionInfo();
 
-
         //Location
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(HomeActivity.this);
+
+        imageViewGallery.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(HomeActivity.this, GalleryActivity.class);
+                startActivity(intent);
+            }
+        });
 
         imageViewSendNetwork.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -207,11 +217,10 @@ public class HomeActivity extends AppCompatActivity {
             }
         });
 
-        imageViewCamera.setOnClickListener(new View.OnClickListener() {
+        cardViewCamera.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 if (isCameraPermissionGranted()) {
-                    //Open Camera
                     openCamera();
                 } else {
                     requestCameraPermission();
@@ -250,9 +259,14 @@ public class HomeActivity extends AppCompatActivity {
         if (requestCode == IMAGE_CAPTURE_REQUEST && resultCode == RESULT_OK && data != null) {
             Bundle extras = data.getExtras();
             Bitmap imageThumbnail = (Bitmap) extras.get("data");
+
+            saveImage(imageThumbnail);
+
+           /*
             Intent intent = new Intent(HomeActivity.this, ImagePreviewActivity.class);
             intent.putExtra("image", imageThumbnail);
             startActivity(intent);
+            */
         } else if (resultCode == LOCATION_SETTINGS_REQUEST) {
             if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 Log.d("Avery", "GPS disabled");
@@ -310,6 +324,79 @@ public class HomeActivity extends AppCompatActivity {
         }
     }
 
+    public void saveImage(Bitmap image) {
+        UUID uuid = UUID.randomUUID();
+        this.progressDialog.setTitle("Saving image...");
+        this.progressDialog.show();
+        final StorageReference storageReference = imagesRef.child(uuid.toString());
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        image.compress(Bitmap.CompressFormat.JPEG, 75, baos);
+        byte[] data = baos.toByteArray();
+
+        storageReference.putBytes(data).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
+            @Override
+            public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
+                if (task.isSuccessful()) {
+                    storageReference.getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
+                        @Override
+                        public void onSuccess(Uri uri) {
+                            uploadImageToFirestore(uri.toString());
+                        }
+                    });
+                } else {
+                    Log.e("Avery", task.getException().getMessage());
+                    progressDialog.dismiss();
+                }
+            }
+        });
+    }
+
+    public void uploadImageToFirestore(final String uri) {
+        usersRef.document(currentUserID).get().addOnSuccessListener(new OnSuccessListener<DocumentSnapshot>() {
+            @Override
+            public void onSuccess(DocumentSnapshot documentSnapshot) {
+                if (documentSnapshot.exists()) {
+                    String first_name = documentSnapshot.get("first_name").toString();
+                    String last_name = documentSnapshot.get("last_name").toString();
+                    String full_name = first_name + " " + last_name;
+
+                    Map<String, Object> map = new ArrayMap<>();
+
+                    /*
+                      imageMap.put("user_id", ImagePreviewActivity.this.currentUserID);
+                    imageMap.put("image_url", uri);
+                    imageMap.put("timestamp", timeStamp);
+                    imageMap.put("full_name", fullName);
+                     */
+                    map.put("user_id", currentUserID);
+                    map.put("image_url", uri);
+                    map.put("timestamp", getCurrentTimestamp());
+                    map.put("full_name", full_name);
+
+                    uploadedImagesRef.document().set(map).addOnCompleteListener(new OnCompleteListener<Void>() {
+                        @Override
+                        public void onComplete(@NonNull Task<Void> task) {
+                            if (task.isSuccessful()) {
+                                Toast.makeText(HomeActivity.this, "", Toast.LENGTH_SHORT).show();
+                               openCamera();
+                            } else {
+                                
+                            }
+                        }
+                    });
+                } else {
+                    Log.e("Avery", "Documentsnapshot does not exits");
+                }
+            }
+        }).addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(@NonNull Exception e) {
+                Log.e("Avery", e.getMessage());
+            }
+        });
+    }
+
     public void showNetworkDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(HomeActivity.this);
         Dialog.OnClickListener clickListener = new DialogInterface.OnClickListener() {
@@ -317,6 +404,9 @@ public class HomeActivity extends AppCompatActivity {
             public void onClick(DialogInterface dialogInterface, int i) {
                 switch (i) {
                     case Dialog.BUTTON_POSITIVE:
+                        ProgressDialog progressDialog = new ProgressDialog(HomeActivity.this);
+                        progressDialog.setTitle("Sending network info...");
+                        progressDialog.show();
                         //Yes
                         String BSSID = connection.getBSSID();
                         String networkOperator = telephonyManager.getNetworkOperator();
@@ -324,28 +414,49 @@ public class HomeActivity extends AppCompatActivity {
                         if (!TextUtils.isEmpty(networkOperator)) {
 
                             if (telephonyManager.getPhoneType() == TelephonyManager.PHONE_TYPE_GSM) {
-                                if(ContextCompat.checkSelfPermission(HomeActivity.this, Manifest.permission.ACCESS_WIFI_STATE) ==
+                                if (ContextCompat.checkSelfPermission(HomeActivity.this, Manifest.permission.ACCESS_WIFI_STATE) ==
                                         PackageManager.PERMISSION_GRANTED) {
                                     final GsmCellLocation location = (GsmCellLocation) telephonyManager.getCellLocation();
                                     if (location != null) {
-
+                                        DateUtils dateUtils = new DateUtils();
                                         int mcc = Integer.parseInt(networkOperator.substring(0, 3));
                                         int mnc = Integer.parseInt(networkOperator.substring(3));
+                                        int lac = location.getLac();
+                                        int cid = location.getCid();
+
                                         Log.d("Avery", "BSSID: " + BSSID);
                                         Log.d("Avery", "MCC: " + mcc);
                                         Log.d("Avery", "MNC: " + mnc);
                                         Log.d("Avery", "LAC: " + location.getLac());
                                         Log.d("Avery", "CID: " + location.getCid());
 
-                                        /*
-                                        1. NEEDS MORE CHECKING. KUNG GSM BA SIYA OR ANYWHAT
-                                        2. FIRESTORE INSERTION
-                                         */
+                                        Map<String, Object> map = new ArrayMap<>();
+                                        map.put("user_id", currentUserID);
+                                        map.put("username", mAuth.getCurrentUser().getEmail());
+                                        map.put("bssid", BSSID);
+                                        map.put("mcc", mcc);
+                                        map.put("mnc", mnc);
+                                        map.put("lac", lac);
+                                        map.put("cid", cid);
+                                        map.put("date", dateUtils.getCurrentDate());
+                                        map.put("time", dateUtils.getCurrentTime());
+
+                                        networksRef.document().set(map).addOnCompleteListener(new OnCompleteListener<Void>() {
+                                            @Override
+                                            public void onComplete(@NonNull Task<Void> task) {
+                                                if (task.isSuccessful()) {
+                                                    Toast.makeText(HomeActivity.this, "Network information sent successfully!", Toast.LENGTH_SHORT).show();
+                                                } else {
+                                                    Log.e("Avery", task.getException().getMessage());
+                                                }
+                                            }
+                                        });
                                     }
                                 }
                             }
 
                         }
+                        progressDialog.dismiss();
                         break;
                     case Dialog.BUTTON_NEGATIVE:
                         //No
@@ -455,30 +566,6 @@ public class HomeActivity extends AppCompatActivity {
         ActivityCompat.requestPermissions(HomeActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_REQUEST);
     }
 
-    public double[] getLatLong() {
-        if (ContextCompat.checkSelfPermission(HomeActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-
-            fusedLocationProviderClient.getLastLocation().addOnCompleteListener(new OnCompleteListener<Location>() {
-                @Override
-                public void onComplete(@NonNull Task<Location> task) {
-                    if (task.isSuccessful()) {
-                        Location currentLocation = task.getResult();
-
-                        if (currentLocation != null) {
-                            Log.d("Avery", "Lat: " + currentLocation.getLatitude());
-                            Log.d("Avery", "Long: " + currentLocation.getLongitude());
-                        } else {
-                            Log.e("Avery", "Current location is null");
-                        }
-                    } else {
-
-                    }
-                }
-            });
-        }
-        return latLong;
-    }
-
     private void openCamera() {
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
@@ -487,11 +574,14 @@ public class HomeActivity extends AppCompatActivity {
     }
 
     public void requestCameraPermission() {
-        ActivityCompat.requestPermissions(HomeActivity.this, new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST);
+        ActivityCompat.requestPermissions(HomeActivity.this, new String[]{Manifest.permission.CAMERA, Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE}, CAMERA_REQUEST);
     }
 
     public boolean isCameraPermissionGranted() {
         if (ContextCompat.checkSelfPermission(HomeActivity.this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(HomeActivity.this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(HomeActivity.this, Manifest.permission.READ_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
             // Permission is not granted
             return false;
