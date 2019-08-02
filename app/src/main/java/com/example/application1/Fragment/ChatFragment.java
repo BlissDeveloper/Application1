@@ -135,8 +135,7 @@ public class ChatFragment extends Fragment {
         };
         firestoreRecyclerAdapter.startListening();
         recyclerViewChat.setAdapter(firestoreRecyclerAdapter);
-
-        recyclerViewChat.scrollToPosition(recyclerViewChat.getAdapter().getItemCount() - 1);
+        recyclerViewChat.scrollToPosition(recyclerViewChat.computeVerticalScrollRange() - 1);
     }
 
     public void sendMessage(final String message) {

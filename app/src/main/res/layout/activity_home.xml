@@ -23,14 +23,11 @@
         android:layout_marginStart="16dp"
         android:layout_marginTop="16dp"
         android:layout_marginEnd="8dp"
-        android:clickable="true"
-        app:cardCornerRadius="4dp"
-        app:cardElevation="4dp"
-        app:layout_constraintBottom_toTopOf="@+id/cardView3"
+        app:layout_constraintBottom_toTopOf="@id/cardView3"
         app:layout_constraintEnd_toStartOf="@+id/cardView2"
         app:layout_constraintHorizontal_bias="0.5"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/toolbarHome">
+        app:layout_constraintTop_toBottomOf="@id/toolbarHome">
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
@@ -40,21 +37,15 @@
                 android:id="@+id/imageViewCamera"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
-                android:adjustViewBounds="false"
-                android:clickable="true"
-                android:cropToPadding="false"
-                android:descendantFocusability="blocksDescendants"
-                android:elevation="-1dp"
-                android:focusable="false"
-                android:focusableInTouchMode="false"
                 android:padding="24dp"
-                android:scaleType="fitCenter"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/icon_camera" />
+                app:srcCompat="@drawable/icon_camera_" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
+
     </androidx.cardview.widget.CardView>
 
     <androidx.cardview.widget.CardView

@@ -119,7 +119,7 @@ public class ImagePreviewActivity extends AppCompatActivity {
         sb.append(".jpg");
         final StorageReference myRef = storageReference.child(sb.toString());
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        this.image.compress(CompressFormat.JPEG, 100, baos);
+        this.image.compress(CompressFormat.JPEG, 75, baos);
         myRef.putBytes(baos.toByteArray()).addOnCompleteListener((OnCompleteListener) new OnCompleteListener<TaskSnapshot>() {
             public void onComplete(@NonNull Task<TaskSnapshot> task) {
                 if (task.isSuccessful()) {
